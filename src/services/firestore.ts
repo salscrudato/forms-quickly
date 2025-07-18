@@ -86,9 +86,14 @@ export class FormsService {
   static async createForm(formData: Omit<FormMetadata, 'id' | 'lastModified' | 'uploadedAt'>, userId: string): Promise<string> {
     try {
       const searchKeywords = this.generateSearchKeywords(formData);
-      
+
+      // Clean the form data to remove undefined values
+      const cleanedFormData = Object.fromEntries(
+        Object.entries(formData).filter(([_, value]) => value !== undefined)
+      );
+
       const firestoreForm: Omit<FirestoreForm, 'id'> = {
-        ...formData,
+        ...cleanedFormData,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         createdBy: userId,
@@ -100,13 +105,13 @@ export class FormsService {
         lastModified: new Date().toISOString(),
         uploadedAt: new Date().toISOString(),
         uploadedBy: userId,
-      };
+      } as Omit<FirestoreForm, 'id'>;
 
       const docRef = await addDoc(collection(db, COLLECTIONS.FORMS), firestoreForm);
-      
+
       // Log user activity
       await this.logUserActivity(userId, 'upload', docRef.id);
-      
+
       return docRef.id;
     } catch (error) {
       console.error('Error creating form:', error);
@@ -121,38 +126,26 @@ export class FormsService {
     lastDoc?: DocumentSnapshot
   ): Promise<{ forms: FormMetadata[]; lastDoc?: DocumentSnapshot; hasMore: boolean }> {
     try {
-      const constraints: QueryConstraint[] = [
+      // Start with a simple query to avoid index requirements
+      let q = query(
+        collection(db, COLLECTIONS.FORMS),
         where('isDeleted', '==', false),
-        orderBy('updatedAt', 'desc'),
-      ];
+        limit(pageSize)
+      );
 
-      // Apply filters
-      if (filters?.category) {
-        constraints.push(where('category', '==', filters.category));
-      }
-      
-      if (filters?.lineOfBusiness) {
-        constraints.push(where('lineOfBusiness', '==', filters.lineOfBusiness));
-      }
-      
-      if (filters?.isActive !== undefined) {
-        constraints.push(where('isActive', '==', filters.isActive));
-      }
-      
-      if (filters?.states && filters.states.length > 0) {
-        constraints.push(where('stateApplicability', 'array-contains-any', filters.states));
-      }
-
-      // Add pagination
-      constraints.push(limit(pageSize));
+      // Add pagination if provided
       if (lastDoc) {
-        constraints.push(startAfter(lastDoc));
+        q = query(
+          collection(db, COLLECTIONS.FORMS),
+          where('isDeleted', '==', false),
+          startAfter(lastDoc),
+          limit(pageSize)
+        );
       }
 
-      const q = query(collection(db, COLLECTIONS.FORMS), ...constraints);
       const querySnapshot = await getDocs(q);
-      
-      const forms: FormMetadata[] = querySnapshot.docs.map(doc => ({
+
+      let forms: FormMetadata[] = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         // Convert Firestore timestamps to ISO strings
@@ -162,6 +155,25 @@ export class FormsService {
         effectiveDate: doc.data().effectiveDate,
         expirationDate: doc.data().expirationDate,
       } as FormMetadata));
+
+      // Apply client-side filtering for now (until indexes are built)
+      if (filters) {
+        forms = forms.filter(form => {
+          if (filters.category && form.category !== filters.category) return false;
+          if (filters.lineOfBusiness && form.lineOfBusiness !== filters.lineOfBusiness) return false;
+          if (filters.isActive !== undefined && form.isActive !== filters.isActive) return false;
+          if (filters.states && filters.states.length > 0) {
+            const hasMatchingState = filters.states.some(state =>
+              form.stateApplicability.includes(state)
+            );
+            if (!hasMatchingState) return false;
+          }
+          return true;
+        });
+      }
+
+      // Sort by last modified (client-side for now)
+      forms.sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime());
 
       const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1];
       const hasMore = querySnapshot.docs.length === pageSize;
@@ -185,35 +197,28 @@ export class FormsService {
         return result.forms;
       }
 
+      // For now, get all forms and filter client-side to avoid index requirements
+      const result = await this.getForms(filters, 100); // Get more forms for search
+      const allForms = result.forms;
+
       const keywords = searchQuery.toLowerCase().split(' ').filter(word => word.length > 0);
-      
-      const constraints: QueryConstraint[] = [
-        where('isDeleted', '==', false),
-        where('searchKeywords', 'array-contains-any', keywords),
-        orderBy('updatedAt', 'desc'),
-        limit(pageSize),
-      ];
 
-      // Apply additional filters
-      if (filters?.category) {
-        constraints.push(where('category', '==', filters.category));
-      }
-      
-      if (filters?.isActive !== undefined) {
-        constraints.push(where('isActive', '==', filters.isActive));
-      }
+      // Client-side search
+      const searchResults = allForms.filter(form => {
+        const searchText = [
+          form.title,
+          form.formNumber,
+          form.description || '',
+          form.category,
+          form.lineOfBusiness,
+          ...form.tags
+        ].join(' ').toLowerCase();
 
-      const q = query(collection(db, COLLECTIONS.FORMS), ...constraints);
-      const querySnapshot = await getDocs(q);
-      
-      const forms: FormMetadata[] = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        lastModified: doc.data().updatedAt?.toDate?.()?.toISOString() || doc.data().lastModified,
-        uploadedAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().uploadedAt,
-      } as FormMetadata));
+        return keywords.some(keyword => searchText.includes(keyword));
+      });
 
-      return forms;
+      // Limit results
+      return searchResults.slice(0, pageSize);
     } catch (error) {
       console.error('Error searching forms:', error);
       throw new Error('Failed to search forms');
@@ -363,26 +368,34 @@ export class FormsService {
     callback: (forms: FormMetadata[]) => void,
     filters?: FormSearchFilters
   ): Unsubscribe {
-    const constraints: QueryConstraint[] = [
+    // Simple query to avoid index requirements
+    const q = query(
+      collection(db, COLLECTIONS.FORMS),
       where('isDeleted', '==', false),
-      orderBy('updatedAt', 'desc'),
-      limit(50), // Limit for real-time updates
-    ];
+      limit(50)
+    );
 
-    if (filters?.category) {
-      constraints.push(where('category', '==', filters.category));
-    }
-
-    const q = query(collection(db, COLLECTIONS.FORMS), ...constraints);
-    
     return onSnapshot(q, (querySnapshot) => {
-      const forms: FormMetadata[] = querySnapshot.docs.map(doc => ({
+      let forms: FormMetadata[] = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         lastModified: doc.data().updatedAt?.toDate?.()?.toISOString() || doc.data().lastModified,
         uploadedAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().uploadedAt,
       } as FormMetadata));
-      
+
+      // Apply client-side filtering
+      if (filters) {
+        forms = forms.filter(form => {
+          if (filters.category && form.category !== filters.category) return false;
+          if (filters.lineOfBusiness && form.lineOfBusiness !== filters.lineOfBusiness) return false;
+          if (filters.isActive !== undefined && form.isActive !== filters.isActive) return false;
+          return true;
+        });
+      }
+
+      // Sort by last modified
+      forms.sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime());
+
       callback(forms);
     });
   }

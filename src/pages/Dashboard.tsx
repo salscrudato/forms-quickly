@@ -16,6 +16,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useForms } from '@/hooks/useForms';
+import { seedSampleData } from '@/utils/seedData';
 import { ROUTES, APP_NAME } from '@/constants';
 import type { FormSearchFilters } from '@/types';
 import LoadingSpinner from '@/components/LoadingSpinner';
@@ -46,6 +47,19 @@ const Dashboard = () => {
     navigate(ROUTES.HOME);
   };
 
+  const handleSeedData = async () => {
+    if (!user?.uid) return;
+
+    try {
+      await seedSampleData(user.uid);
+      refresh(); // Refresh the forms list
+      alert('Sample data added successfully!');
+    } catch (error) {
+      console.error('Error seeding data:', error);
+      alert('Failed to add sample data. Check console for details.');
+    }
+  };
+
   return (
     <Box minH="100vh" bg="gray.50">
       {/* Header */}
@@ -70,6 +84,11 @@ const Dashboard = () => {
             <Text fontSize="sm" color="gray.600">
               Welcome, {user?.email || 'Guest'}
             </Text>
+            {forms.length === 0 && !loading && (
+              <Button size="sm" onClick={handleSeedData} colorPalette="green">
+                Add Sample Data
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleSignOut}>
               Sign Out
             </Button>
