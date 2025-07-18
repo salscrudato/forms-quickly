@@ -53,6 +53,27 @@ const Forms = () => {
     }
   }, [location.state, updateSearch, updateFilters]);
 
+  // Helper function to display empty values
+  const displayValue = (value: string | undefined | null): string => {
+    return value && value.trim() ? value : '-';
+  };
+
+  const formatFileSize = (bytes: number | undefined) => {
+    if (!bytes) return '-';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return '-';
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch {
+      return '-';
+    }
+  };
+
   // Handle local filter changes
   const handleSearchChange = (value: string) => {
     setLocalSearchQuery(value);
@@ -308,7 +329,7 @@ const Forms = () => {
                         overflow: 'hidden'
                       }}
                     >
-                      {form.description}
+                      {displayValue(form.description)}
                     </Text>
                   )}
 
@@ -324,9 +345,7 @@ const Forms = () => {
                     </HStack>
                     <HStack justify="space-between">
                       <Text color="gray.500">Edition Date:</Text>
-                      <Text fontWeight="medium">
-                        {new Date(form.editionDate).toLocaleDateString()}
-                      </Text>
+                      <Text fontWeight="medium">{formatDate(form.editionDate)}</Text>
                     </HStack>
                   </VStack>
 
@@ -343,14 +362,10 @@ const Forms = () => {
                   </Box>
 
                   {/* File Info */}
-                  {form.fileSize && (
-                    <HStack justify="space-between" fontSize="xs" color="gray.500">
-                      <Text>Size: {(form.fileSize / 1024).toFixed(1)} KB</Text>
-                      <Text>
-                        Modified: {new Date(form.lastModified).toLocaleDateString()}
-                      </Text>
-                    </HStack>
-                  )}
+                  <HStack justify="space-between" fontSize="xs" color="gray.500">
+                    <Text>Size: {formatFileSize(form.fileSize)}</Text>
+                    <Text>Modified: {formatDate(form.lastModified)}</Text>
+                  </HStack>
                 </VStack>
               </Box>
               ))}

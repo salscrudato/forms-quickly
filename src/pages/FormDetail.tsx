@@ -12,45 +12,42 @@ import {
   IconButton,
 } from '@chakra-ui/react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useForm } from '@/hooks/useForms';
 import { ROUTES, APP_NAME, US_STATES } from '@/constants';
 import type { FormMetadata } from '@/types';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const FormDetail = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [isPdfOpen, setIsPdfOpen] = useState(false);
 
-  // Mock form data - in real app, this would be fetched based on ID
-  const mockForm: FormMetadata = {
-    id: id || '1',
-    title: 'Commercial General Liability Application',
-    description: 'Standard application form for commercial general liability insurance coverage. This form collects essential information about the business operations, prior claims history, and risk exposures to determine appropriate coverage and pricing.',
-    formNumber: 'CGL-001-CA',
-    category: 'Application',
-    stateApplicability: ['CA', 'NV', 'AZ'],
-    editionDate: '2024-01-15T00:00:00Z',
-    effectiveDate: '2024-02-01T00:00:00Z',
-    expirationDate: '2025-02-01T00:00:00Z',
-    isActive: true,
-    tags: ['liability', 'commercial', 'application', 'general liability'],
-    version: '2024.1',
-    lineOfBusiness: 'General Liability',
-    lastModified: '2024-01-15T10:30:00Z',
-    modifiedBy: 'john.doe@company.com',
-    uploadedAt: '2024-01-15T08:00:00Z',
-    uploadedBy: 'john.doe@company.com',
-    fileUrl: '/sample-form.pdf',
-    fileSize: 245760,
+  // Use the real form hook to get form data
+  const { form: formData, loading, error } = useForm(id || '');
+
+  // Helper function to display empty values
+  const displayValue = (value: string | undefined | null): string => {
+    return value && value.trim() ? value : '-';
   };
 
   const getStateName = (code: string) => {
     return US_STATES.find(state => state.code === code)?.name || code;
   };
 
-  const formatFileSize = (bytes: number) => {
+  const formatFileSize = (bytes: number | undefined) => {
+    if (!bytes) return '-';
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return '-';
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch {
+      return '-';
+    }
   };
 
   return (
@@ -86,68 +83,96 @@ const FormDetail = () => {
 
       {/* Main Content */}
       <Box p={6}>
-        <VStack gap={6} align="stretch">
-          {/* Form Header */}
-          <Box bg="white" p={6} rounded="xl" shadow="sm" border="1px solid" borderColor="gray.200">
-            <Flex justify="space-between" align="start" mb={4}>
-              <VStack align="start" gap={2}>
-                <HStack gap={3}>
-                  <Heading size="xl" color="gray.800">
-                    {mockForm.title}
-                  </Heading>
-                  <Badge 
-                    colorPalette={mockForm.isActive ? 'green' : 'red'}
-                    variant="subtle"
-                    size="lg"
-                  >
-                    {mockForm.isActive ? 'Active' : 'Inactive'}
-                  </Badge>
-                </HStack>
-                <Text fontSize="lg" color="blue.600" fontWeight="medium">
-                  Form Number: {mockForm.formNumber}
-                </Text>
-                <Text color="gray.600">
-                  {mockForm.description}
-                </Text>
-              </VStack>
-              
-              <VStack gap={2}>
-                <Button
-                  colorPalette="blue"
-                  size="lg"
-                  onClick={() => setIsPdfOpen(true)}
-                  disabled={!mockForm.fileUrl}
-                >
-                  View PDF
-                </Button>
-                <Button variant="outline" size="sm">
-                  Download
-                </Button>
-              </VStack>
-            </Flex>
-
-            {/* Quick Stats */}
-            <SimpleGrid columns={{ base: 2, md: 4 }} gap={4}>
-              <Box textAlign="center" p={3} bg="gray.50" rounded="lg">
-                <Text fontSize="sm" color="gray.500">Version</Text>
-                <Text fontWeight="bold">{mockForm.version}</Text>
-              </Box>
-              <Box textAlign="center" p={3} bg="gray.50" rounded="lg">
-                <Text fontSize="sm" color="gray.500">Category</Text>
-                <Text fontWeight="bold">{mockForm.category}</Text>
-              </Box>
-              <Box textAlign="center" p={3} bg="gray.50" rounded="lg">
-                <Text fontSize="sm" color="gray.500">Line of Business</Text>
-                <Text fontWeight="bold">{mockForm.lineOfBusiness}</Text>
-              </Box>
-              <Box textAlign="center" p={3} bg="gray.50" rounded="lg">
-                <Text fontSize="sm" color="gray.500">File Size</Text>
-                <Text fontWeight="bold">
-                  {mockForm.fileSize ? formatFileSize(mockForm.fileSize) : 'N/A'}
-                </Text>
-              </Box>
-            </SimpleGrid>
+        {/* Loading State */}
+        {loading && (
+          <Box textAlign="center" py={12}>
+            <LoadingSpinner />
+            <Text mt={4} color="gray.600">Loading form details...</Text>
           </Box>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <Box textAlign="center" py={12}>
+            <Text color="red.500" mb={4}>{error}</Text>
+            <Button onClick={() => navigate(ROUTES.FORMS)} variant="outline">
+              Back to Forms
+            </Button>
+          </Box>
+        )}
+
+        {/* Form Not Found */}
+        {!loading && !error && !formData && (
+          <Box textAlign="center" py={12}>
+            <Text fontSize="lg" color="gray.500" mb={4}>Form not found</Text>
+            <Button onClick={() => navigate(ROUTES.FORMS)} variant="outline">
+              Back to Forms
+            </Button>
+          </Box>
+        )}
+
+        {/* Form Content */}
+        {!loading && !error && formData && (
+          <VStack gap={6} align="stretch">
+            {/* Form Header */}
+            <Box bg="white" p={6} rounded="xl" shadow="sm" border="1px solid" borderColor="gray.200">
+              <Flex justify="space-between" align="start" mb={4}>
+                <VStack align="start" gap={2}>
+                  <HStack gap={3}>
+                    <Heading size="xl" color="gray.800">
+                      {displayValue(formData.title)}
+                    </Heading>
+                    <Badge
+                      colorPalette={formData.isActive ? 'green' : 'red'}
+                      variant="subtle"
+                      size="lg"
+                    >
+                      {formData.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </HStack>
+                  <Text fontSize="lg" color="blue.600" fontWeight="medium">
+                    Form Number: {displayValue(formData.formNumber)}
+                  </Text>
+                  <Text color="gray.600">
+                    {displayValue(formData.description)}
+                  </Text>
+                </VStack>
+
+                <VStack gap={2}>
+                  <Button
+                    colorPalette="blue"
+                    size="lg"
+                    onClick={() => setIsPdfOpen(true)}
+                    disabled={!formData.fileUrl}
+                  >
+                    View PDF
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={!formData.fileUrl}>
+                    Download
+                  </Button>
+                </VStack>
+              </Flex>
+
+              {/* Quick Stats */}
+              <SimpleGrid columns={{ base: 2, md: 4 }} gap={4}>
+                <Box textAlign="center" p={3} bg="gray.50" rounded="lg">
+                  <Text fontSize="sm" color="gray.500">Version</Text>
+                  <Text fontWeight="bold">{displayValue(formData.version)}</Text>
+                </Box>
+                <Box textAlign="center" p={3} bg="gray.50" rounded="lg">
+                  <Text fontSize="sm" color="gray.500">Category</Text>
+                  <Text fontWeight="bold">{displayValue(formData.category)}</Text>
+                </Box>
+                <Box textAlign="center" p={3} bg="gray.50" rounded="lg">
+                  <Text fontSize="sm" color="gray.500">Line of Business</Text>
+                  <Text fontWeight="bold">{displayValue(formData.lineOfBusiness)}</Text>
+                </Box>
+                <Box textAlign="center" p={3} bg="gray.50" rounded="lg">
+                  <Text fontSize="sm" color="gray.500">File Size</Text>
+                  <Text fontWeight="bold">{formatFileSize(formData.fileSize)}</Text>
+                </Box>
+              </SimpleGrid>
+            </Box>
 
           {/* Detailed Information */}
           <Box bg="white" p={6} rounded="xl" shadow="sm" border="1px solid" borderColor="gray.200">
@@ -159,45 +184,43 @@ const FormDetail = () => {
                     <VStack align="stretch" gap={4}>
                       <Box>
                         <Text fontSize="sm" color="gray.500" mb={1}>Form Number</Text>
-                        <Text fontWeight="medium">{mockForm.formNumber}</Text>
+                        <Text fontWeight="medium">{displayValue(formData.formNumber)}</Text>
                       </Box>
                       <Box>
                         <Text fontSize="sm" color="gray.500" mb={1}>Category</Text>
-                        <Text fontWeight="medium">{mockForm.category}</Text>
+                        <Text fontWeight="medium">{displayValue(formData.category)}</Text>
                       </Box>
                       <Box>
                         <Text fontSize="sm" color="gray.500" mb={1}>Line of Business</Text>
-                        <Text fontWeight="medium">{mockForm.lineOfBusiness}</Text>
+                        <Text fontWeight="medium">{displayValue(formData.lineOfBusiness)}</Text>
                       </Box>
                       <Box>
                         <Text fontSize="sm" color="gray.500" mb={1}>Version</Text>
-                        <Text fontWeight="medium">{mockForm.version}</Text>
+                        <Text fontWeight="medium">{displayValue(formData.version)}</Text>
                       </Box>
                     </VStack>
 
                     <VStack align="stretch" gap={4}>
                       <Box>
                         <Text fontSize="sm" color="gray.500" mb={1}>Status</Text>
-                        <Badge 
-                          colorPalette={mockForm.isActive ? 'green' : 'red'}
+                        <Badge
+                          colorPalette={formData.isActive ? 'green' : 'red'}
                           variant="subtle"
                         >
-                          {mockForm.isActive ? 'Active' : 'Inactive'}
+                          {formData.isActive ? 'Active' : 'Inactive'}
                         </Badge>
                       </Box>
                       <Box>
                         <Text fontSize="sm" color="gray.500" mb={1}>File Size</Text>
-                        <Text fontWeight="medium">
-                          {mockForm.fileSize ? formatFileSize(mockForm.fileSize) : 'No file uploaded'}
-                        </Text>
+                        <Text fontWeight="medium">{formatFileSize(formData.fileSize)}</Text>
                       </Box>
                       <Box>
                         <Text fontSize="sm" color="gray.500" mb={1}>Uploaded By</Text>
-                        <Text fontWeight="medium">{mockForm.uploadedBy || 'N/A'}</Text>
+                        <Text fontWeight="medium">{displayValue(formData.uploadedBy)}</Text>
                       </Box>
                       <Box>
                         <Text fontSize="sm" color="gray.500" mb={1}>Last Modified By</Text>
-                        <Text fontWeight="medium">{mockForm.modifiedBy}</Text>
+                        <Text fontWeight="medium">{displayValue(formData.modifiedBy)}</Text>
                       </Box>
                     </VStack>
                 </SimpleGrid>
@@ -211,12 +234,16 @@ const FormDetail = () => {
                     <Box>
                       <Text fontSize="sm" color="gray.500" mb={3}>Applicable States</Text>
                       <VStack align="stretch" gap={2}>
-                        {mockForm.stateApplicability.map((state) => (
+                        {formData.stateApplicability && formData.stateApplicability.length > 0 ? (
+                          formData.stateApplicability.map((state) => (
                           <HStack key={state} justify="space-between">
                             <Badge variant="outline">{state}</Badge>
                             <Text fontSize="sm">{getStateName(state)}</Text>
                           </HStack>
-                        ))}
+                        ))
+                        ) : (
+                          <Text fontWeight="medium">-</Text>
+                        )}
                       </VStack>
                     </Box>
                   </VStack>
@@ -224,32 +251,20 @@ const FormDetail = () => {
                   <VStack align="stretch" gap={4}>
                     <Box>
                       <Text fontSize="sm" color="gray.500" mb={1}>Edition Date</Text>
-                      <Text fontWeight="medium">
-                        {new Date(mockForm.editionDate).toLocaleDateString()}
-                      </Text>
+                      <Text fontWeight="medium">{formatDate(formData.editionDate)}</Text>
                     </Box>
                     <Box>
                       <Text fontSize="sm" color="gray.500" mb={1}>Effective Date</Text>
-                      <Text fontWeight="medium">
-                        {new Date(mockForm.effectiveDate).toLocaleDateString()}
-                      </Text>
+                      <Text fontWeight="medium">{formatDate(formData.effectiveDate)}</Text>
                     </Box>
-                    {mockForm.expirationDate && (
-                      <Box>
-                        <Text fontSize="sm" color="gray.500" mb={1}>Expiration Date</Text>
-                        <Text fontWeight="medium">
-                          {new Date(mockForm.expirationDate).toLocaleDateString()}
-                        </Text>
-                      </Box>
-                    )}
-                    {mockForm.uploadedAt && (
-                      <Box>
-                        <Text fontSize="sm" color="gray.500" mb={1}>Uploaded Date</Text>
-                        <Text fontWeight="medium">
-                          {new Date(mockForm.uploadedAt).toLocaleDateString()}
-                        </Text>
-                      </Box>
-                    )}
+                    <Box>
+                      <Text fontSize="sm" color="gray.500" mb={1}>Expiration Date</Text>
+                      <Text fontWeight="medium">{formatDate(formData.expirationDate)}</Text>
+                    </Box>
+                    <Box>
+                      <Text fontSize="sm" color="gray.500" mb={1}>Uploaded Date</Text>
+                      <Text fontWeight="medium">{formatDate(formData.uploadedAt)}</Text>
+                    </Box>
                   </VStack>
                 </SimpleGrid>
               </Box>
@@ -262,50 +277,51 @@ const FormDetail = () => {
                     <HStack justify="space-between" mb={2}>
                       <Text fontWeight="medium">Form Updated</Text>
                       <Text fontSize="sm" color="gray.500">
-                        {new Date(mockForm.lastModified).toLocaleString()}
+                        {formData.lastModified ? new Date(formData.lastModified).toLocaleString() : '-'}
                       </Text>
                     </HStack>
                     <Text fontSize="sm" color="gray.600">
-                      Updated by {mockForm.modifiedBy}
+                      Updated by {displayValue(formData.modifiedBy)}
                     </Text>
                   </Box>
 
-                  {mockForm.uploadedAt && (
-                    <Box p={4} border="1px solid" borderColor="gray.200" rounded="lg">
-                      <HStack justify="space-between" mb={2}>
-                        <Text fontWeight="medium">Form Uploaded</Text>
-                        <Text fontSize="sm" color="gray.500">
-                          {new Date(mockForm.uploadedAt).toLocaleString()}
-                        </Text>
-                      </HStack>
-                      <Text fontSize="sm" color="gray.600">
-                        Uploaded by {mockForm.uploadedBy}
+                  <Box p={4} border="1px solid" borderColor="gray.200" rounded="lg">
+                    <HStack justify="space-between" mb={2}>
+                      <Text fontWeight="medium">Form Uploaded</Text>
+                      <Text fontSize="sm" color="gray.500">
+                        {formData.uploadedAt ? new Date(formData.uploadedAt).toLocaleString() : '-'}
                       </Text>
-                    </Box>
-                  )}
+                    </HStack>
+                    <Text fontSize="sm" color="gray.600">
+                      Uploaded by {displayValue(formData.uploadedBy)}
+                    </Text>
+                  </Box>
                 </VStack>
               </Box>
 
               {/* Tags Section */}
               <Box>
                 <Heading size="md" mb={4}>Tags</Heading>
-                <HStack gap={2} flexWrap="wrap">
-                  {mockForm.tags.map((tag, index) => (
-                    <Badge key={index} variant="subtle" colorPalette="blue">
-                      {tag}
-                    </Badge>
-                  ))}
-                </HStack>
+                {formData.tags && formData.tags.length > 0 ? (
+                  <HStack gap={2} flexWrap="wrap">
+                    {formData.tags.map((tag, index) => (
+                      <Badge key={index} variant="subtle" colorPalette="blue">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </HStack>
+                ) : (
+                  <Text fontWeight="medium">-</Text>
+                )}
               </Box>
             </VStack>
           </Box>
-
-
-        </VStack>
+          </VStack>
+        )}
       </Box>
 
       {/* PDF Viewer Placeholder */}
-      {isPdfOpen && (
+      {isPdfOpen && formData && (
         <Box
           position="fixed"
           top="0"
@@ -330,7 +346,7 @@ const FormDetail = () => {
           >
             <Flex justify="space-between" align="center" mb={4}>
               <Heading size="md">
-                {mockForm.title} - {mockForm.formNumber}
+                {displayValue(formData.title)} - {displayValue(formData.formNumber)}
               </Heading>
               <Button size="sm" onClick={() => setIsPdfOpen(false)}>
                 Close

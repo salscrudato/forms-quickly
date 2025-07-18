@@ -36,6 +36,27 @@ const Dashboard = () => {
     refresh
   } = useForms();
 
+  // Helper function to display empty values
+  const displayValue = (value: string | undefined | null): string => {
+    return value && value.trim() ? value : '-';
+  };
+
+  const formatFileSize = (bytes: number | undefined) => {
+    if (!bytes) return '-';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return '-';
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch {
+      return '-';
+    }
+  };
+
   // Update search when local search changes
   const handleSearchChange = (value: string) => {
     setLocalSearchQuery(value);
@@ -208,20 +229,18 @@ const Dashboard = () => {
                     </Box>
 
                     {/* Description */}
-                    {form.description && (
-                      <Text
-                        fontSize="sm"
-                        color="gray.600"
-                        style={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden'
-                        }}
-                      >
-                        {form.description}
-                      </Text>
-                    )}
+                    <Text
+                      fontSize="sm"
+                      color="gray.600"
+                      style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {displayValue(form.description)}
+                    </Text>
 
                     {/* Metadata */}
                     <VStack align="stretch" gap={2} fontSize="sm">
@@ -235,9 +254,7 @@ const Dashboard = () => {
                       </HStack>
                       <HStack justify="space-between">
                         <Text color="gray.500">Edition Date:</Text>
-                        <Text fontWeight="medium">
-                          {new Date(form.editionDate).toLocaleDateString()}
-                        </Text>
+                        <Text fontWeight="medium">{formatDate(form.editionDate)}</Text>
                       </HStack>
                     </VStack>
 
@@ -254,14 +271,10 @@ const Dashboard = () => {
                     </Box>
 
                     {/* File Info */}
-                    {form.fileSize && (
-                      <HStack justify="space-between" fontSize="xs" color="gray.500">
-                        <Text>Size: {(form.fileSize / 1024).toFixed(1)} KB</Text>
-                        <Text>
-                          Modified: {new Date(form.lastModified).toLocaleDateString()}
-                        </Text>
-                      </HStack>
-                    )}
+                    <HStack justify="space-between" fontSize="xs" color="gray.500">
+                      <Text>Size: {formatFileSize(form.fileSize)}</Text>
+                      <Text>Modified: {formatDate(form.lastModified)}</Text>
+                    </HStack>
                   </VStack>
                 </Box>
                 ))}
