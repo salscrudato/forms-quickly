@@ -300,27 +300,7 @@ const FormDetail = () => {
             </VStack>
           </Box>
 
-          {/* Actions */}
-          <Box bg="white" p={6} rounded="xl" shadow="sm" border="1px solid" borderColor="gray.200">
-            <Heading size="md" mb={4}>Actions</Heading>
-            <HStack gap={4} flexWrap="wrap">
-              <Button colorPalette="blue">
-                Edit Metadata
-              </Button>
-              <Button variant="outline">
-                Upload New Version
-              </Button>
-              <Button variant="outline">
-                Duplicate Form
-              </Button>
-              <Button variant="outline">
-                Export Data
-              </Button>
-              <Button variant="outline" colorPalette="red">
-                {mockForm.isActive ? 'Deactivate' : 'Activate'}
-              </Button>
-            </HStack>
-          </Box>
+
         </VStack>
       </Box>
 
