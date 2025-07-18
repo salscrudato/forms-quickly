@@ -15,85 +15,31 @@ import {
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useForms } from '@/hooks/useForms';
 import { ROUTES, APP_NAME } from '@/constants';
 import type { FormSearchFilters } from '@/types';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filters, setFilters] = useState<FormSearchFilters>({});
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
 
-  // Mock forms data - same as Forms page
-  const mockForms = [
-    {
-      id: '1',
-      title: 'Commercial General Liability Application',
-      description: 'Standard application form for commercial general liability insurance',
-      formNumber: 'CGL-001-CA',
-      category: 'Application' as const,
-      stateApplicability: ['CA', 'NV', 'AZ'],
-      editionDate: '2024-01-15T00:00:00Z',
-      effectiveDate: '2024-02-01T00:00:00Z',
-      isActive: true,
-      tags: ['liability', 'commercial', 'application'],
-      version: '2024.1',
-      lineOfBusiness: 'General Liability' as const,
-      lastModified: '2024-01-15T10:30:00Z',
-      modifiedBy: 'user123',
-      fileSize: 245760,
-    },
-    {
-      id: '2',
-      title: 'Workers Compensation Policy Form',
-      description: 'Standard policy form for workers compensation coverage',
-      formNumber: 'WC-POL-002-TX',
-      category: 'Policy' as const,
-      stateApplicability: ['TX', 'OK', 'LA'],
-      editionDate: '2024-01-10T00:00:00Z',
-      effectiveDate: '2024-01-15T00:00:00Z',
-      isActive: true,
-      tags: ['workers comp', 'policy', 'texas'],
-      version: '2024.1',
-      lineOfBusiness: 'Workers Compensation' as const,
-      lastModified: '2024-01-10T14:20:00Z',
-      modifiedBy: 'user456',
-      fileSize: 189440,
-    },
-    {
-      id: '3',
-      title: 'Auto Liability Endorsement - Excluded Driver',
-      description: 'Endorsement to exclude specific drivers from auto liability coverage',
-      formNumber: 'AUTO-END-003-NY',
-      category: 'Endorsement' as const,
-      stateApplicability: ['NY', 'NJ', 'CT'],
-      editionDate: '2024-01-08T00:00:00Z',
-      effectiveDate: '2024-01-20T00:00:00Z',
-      expirationDate: '2025-01-20T00:00:00Z',
-      isActive: false,
-      tags: ['auto', 'endorsement', 'excluded driver'],
-      version: '2023.3',
-      lineOfBusiness: 'Auto' as const,
-      lastModified: '2024-01-08T09:15:00Z',
-      modifiedBy: 'user789',
-      fileSize: 156672,
-    },
-  ];
+  // Use the real forms hook with search functionality
+  const {
+    forms,
+    loading,
+    error,
+    searchQuery,
+    updateSearch,
+    refresh
+  } = useForms();
 
-  // Filter forms based on search query
-  const filteredForms = mockForms.filter(form => {
-    if (!searchQuery.trim()) return true;
-
-    const query = searchQuery.toLowerCase();
-    return (
-      form.title.toLowerCase().includes(query) ||
-      form.formNumber.toLowerCase().includes(query) ||
-      form.description?.toLowerCase().includes(query) ||
-      form.tags.some(tag => tag.toLowerCase().includes(query)) ||
-      form.category.toLowerCase().includes(query) ||
-      form.lineOfBusiness.toLowerCase().includes(query)
-    );
-  });
+  // Update search when local search changes
+  const handleSearchChange = (value: string) => {
+    setLocalSearchQuery(value);
+    updateSearch(value);
+  };
 
   const handleSignOut = async () => {
     // This will be implemented with the auth hook
@@ -147,8 +93,8 @@ const Dashboard = () => {
             <Box maxW="600px" mx="auto">
               <Input
                 placeholder="Search forms by title, number, category, or tags..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={localSearchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 size="lg"
                 bg="white"
                 shadow="sm"
@@ -170,22 +116,41 @@ const Dashboard = () => {
           <Box>
             <Flex justify="space-between" align="center" mb={6}>
               <Heading size="lg">
-                {searchQuery ? `Search Results (${filteredForms.length})` : `All Forms (${filteredForms.length})`}
+                {searchQuery ? `Search Results (${forms.length})` : `All Forms (${forms.length})`}
               </Heading>
               {searchQuery && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => handleSearchChange('')}
                 >
                   Clear Search
                 </Button>
               )}
             </Flex>
 
+            {/* Loading State */}
+            {loading && (
+              <Box textAlign="center" py={12}>
+                <LoadingSpinner />
+                <Text mt={4} color="gray.600">Loading forms...</Text>
+              </Box>
+            )}
+
+            {/* Error State */}
+            {error && (
+              <Box textAlign="center" py={12}>
+                <Text color="red.500" mb={4}>{error}</Text>
+                <Button onClick={refresh} variant="outline">
+                  Try Again
+                </Button>
+              </Box>
+            )}
+
             {/* Forms Grid */}
-            <SimpleGrid columns={{ base: 1, lg: 2, xl: 3 }} gap={6}>
-              {filteredForms.map((form) => (
+            {!loading && !error && (
+              <SimpleGrid columns={{ base: 1, lg: 2, xl: 3 }} gap={6}>
+                {forms.map((form) => (
                 <Box
                   key={form.id}
                   bg="white"
@@ -280,21 +245,29 @@ const Dashboard = () => {
                     )}
                   </VStack>
                 </Box>
-              ))}
-            </SimpleGrid>
+                ))}
+              </SimpleGrid>
+            )}
 
             {/* Empty State */}
-            {filteredForms.length === 0 && (
+            {!loading && !error && forms.length === 0 && (
               <Box textAlign="center" py={12}>
                 <Text fontSize="lg" color="gray.500" mb={4}>
                   {searchQuery ? 'No forms found matching your search' : 'No forms available'}
                 </Text>
-                {searchQuery && (
+                {searchQuery ? (
                   <Button
                     variant="outline"
-                    onClick={() => setSearchQuery('')}
+                    onClick={() => handleSearchChange('')}
                   >
                     Clear Search
+                  </Button>
+                ) : (
+                  <Button
+                    colorPalette="blue"
+                    onClick={() => navigate(ROUTES.FORM_UPLOAD)}
+                  >
+                    Upload Your First Form
                   </Button>
                 )}
               </Box>

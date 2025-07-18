@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   Box,
   Heading,
@@ -13,12 +13,16 @@ import {
   Badge,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
+import { useFormUpload } from '@/hooks/useForms';
 import { ROUTES, APP_NAME, US_STATES } from '@/constants';
-import type { FormCategory, LineOfBusiness } from '@/types';
+import type { FormCategory, LineOfBusiness, FormUpload as FormUploadType } from '@/types';
 
 const FormUpload = () => {
   const navigate = useNavigate();
-  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploading, progress, error, uploadForm } = useFormUpload();
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -44,23 +48,69 @@ const FormUpload = () => {
     'Personal Lines', 'Other'
   ];
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (file.type !== 'application/pdf') {
+        alert('Please select a PDF file');
+        return;
+      }
+
+      // Validate file size (50MB max)
+      if (file.size > 50 * 1024 * 1024) {
+        alert('File size must be less than 50MB');
+        return;
+      }
+
+      setSelectedFile(file);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsUploading(true);
-    
+
+    if (!selectedFile) {
+      alert('Please select a PDF file to upload');
+      return;
+    }
+
     try {
-      // TODO: Implement actual form upload to Firebase
-      console.log('Form data:', formData);
-      
-      // Simulate upload delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Navigate back to forms page
-      navigate(ROUTES.FORMS);
+      // Parse tags
+      const tags = formData.tags
+        .split(',')
+        .map(tag => tag.trim())
+        .filter(tag => tag.length > 0);
+
+      // Create form upload object
+      const formUpload: FormUploadType = {
+        file: selectedFile,
+        metadata: {
+          title: formData.title,
+          description: formData.description || undefined,
+          formNumber: formData.formNumber,
+          category: formData.category as FormCategory,
+          lineOfBusiness: formData.lineOfBusiness as LineOfBusiness,
+          stateApplicability: formData.stateApplicability,
+          editionDate: formData.editionDate,
+          effectiveDate: formData.effectiveDate,
+          expirationDate: formData.expirationDate || undefined,
+          isActive: true,
+          tags,
+          version: formData.version,
+          modifiedBy: '', // Will be set by the service
+          uploadedBy: '', // Will be set by the service
+        },
+      };
+
+      // Upload the form
+      const formId = await uploadForm(formUpload);
+
+      // Navigate to the new form's detail page
+      navigate(`/forms/${formId}`);
     } catch (error) {
       console.error('Upload error:', error);
-    } finally {
-      setIsUploading(false);
+      // Error is handled by the hook
     }
   };
 
@@ -243,25 +293,104 @@ const FormUpload = () => {
 
                 {/* File Upload */}
                 <Box>
-                  <Heading size="md" mb={4}>File Upload</Heading>
+                  <Heading size="md" mb={4}>File Upload *</Heading>
+
+                  {/* File Input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileSelect}
+                    style={{ display: 'none' }}
+                  />
+
                   <Box
                     border="2px dashed"
-                    borderColor="gray.300"
+                    borderColor={selectedFile ? "green.300" : "gray.300"}
                     rounded="lg"
                     p={8}
                     textAlign="center"
                     _hover={{ borderColor: "blue.400" }}
+                    cursor="pointer"
+                    onClick={() => fileInputRef.current?.click()}
                   >
-                    <Text fontSize="lg" color="gray.600" mb={2}>
-                      Drag and drop your PDF file here, or click to browse
-                    </Text>
-                    <Text fontSize="sm" color="gray.500">
-                      Supported format: PDF (Max size: 10MB)
-                    </Text>
-                    <Button mt={4} variant="outline">
-                      Choose File
-                    </Button>
+                    {selectedFile ? (
+                      <VStack gap={3}>
+                        <Text fontSize="lg" color="green.600" fontWeight="medium">
+                          ✓ File Selected
+                        </Text>
+                        <Text fontSize="md" fontWeight="medium">
+                          {selectedFile.name}
+                        </Text>
+                        <Text fontSize="sm" color="gray.500">
+                          Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                        </Text>
+                        <Button size="sm" variant="outline" onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFile(null);
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = '';
+                          }
+                        }}>
+                          Remove File
+                        </Button>
+                      </VStack>
+                    ) : (
+                      <VStack gap={3}>
+                        <Text fontSize="lg" color="gray.600" mb={2}>
+                          Click to select your PDF file
+                        </Text>
+                        <Text fontSize="sm" color="gray.500">
+                          Supported format: PDF (Max size: 50MB)
+                        </Text>
+                        <Button variant="outline">
+                          Choose File
+                        </Button>
+                      </VStack>
+                    )}
                   </Box>
+
+                  {/* Upload Progress */}
+                  {uploading && progress && (
+                    <Box mt={4}>
+                      <Flex justify="space-between" mb={2}>
+                        <Text fontSize="sm" fontWeight="medium">
+                          Uploading...
+                        </Text>
+                        <Text fontSize="sm" color="gray.600">
+                          {progress.percentage.toFixed(1)}%
+                        </Text>
+                      </Flex>
+                      <Box
+                        w="full"
+                        bg="gray.200"
+                        rounded="md"
+                        h="2"
+                        overflow="hidden"
+                      >
+                        <Box
+                          bg="blue.500"
+                          h="full"
+                          rounded="md"
+                          transition="width 0.3s ease"
+                          style={{ width: `${progress.percentage}%` }}
+                        />
+                      </Box>
+                      <Text fontSize="xs" color="gray.500" mt={1}>
+                        {(progress.bytesTransferred / 1024 / 1024).toFixed(2)} MB of{' '}
+                        {(progress.totalBytes / 1024 / 1024).toFixed(2)} MB
+                      </Text>
+                    </Box>
+                  )}
+
+                  {/* Error Display */}
+                  {error && (
+                    <Box mt={4} p={3} bg="red.50" border="1px solid" borderColor="red.200" rounded="md">
+                      <Text fontSize="sm" color="red.700">
+                        {error}
+                      </Text>
+                    </Box>
+                  )}
                 </Box>
 
                 {/* Tags */}
@@ -282,16 +411,25 @@ const FormUpload = () => {
                   <Button
                     variant="outline"
                     onClick={() => navigate(ROUTES.DASHBOARD)}
-                    disabled={isUploading}
+                    disabled={uploading}
                   >
                     Cancel
                   </Button>
                   <Button
                     type="submit"
                     colorPalette="blue"
-                    loading={isUploading}
-                    loadingText="Uploading..."
-                    disabled={!formData.title || !formData.formNumber || !formData.category}
+                    loading={uploading}
+                    loadingText={progress ? `Uploading ${progress.percentage.toFixed(0)}%` : "Uploading..."}
+                    disabled={
+                      !formData.title ||
+                      !formData.formNumber ||
+                      !formData.category ||
+                      !formData.lineOfBusiness ||
+                      !formData.editionDate ||
+                      !formData.effectiveDate ||
+                      !formData.version ||
+                      !selectedFile
+                    }
                   >
                     Upload Form
                   </Button>

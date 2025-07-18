@@ -14,119 +14,55 @@ import {
   IconButton,
 } from '@chakra-ui/react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useForms } from '@/hooks/useForms';
 import { ROUTES, APP_NAME, US_STATES } from '@/constants';
 import type { FormMetadata, FormSearchFilters, FormCategory, LineOfBusiness } from '@/types';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const Forms = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filters, setFilters] = useState<FormSearchFilters>({});
   const [showFilters, setShowFilters] = useState(false);
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+  const [localFilters, setLocalFilters] = useState<FormSearchFilters>({});
+
+  // Use the real forms hook
+  const {
+    forms,
+    loading,
+    error,
+    searchQuery,
+    filters,
+    updateSearch,
+    updateFilters,
+    refresh
+  } = useForms();
 
   // Initialize from navigation state if available
   useEffect(() => {
     if (location.state) {
       const { searchQuery: initialQuery, filters: initialFilters } = location.state as any;
-      if (initialQuery) setSearchQuery(initialQuery);
-      if (initialFilters) setFilters(initialFilters);
+      if (initialQuery) {
+        setLocalSearchQuery(initialQuery);
+        updateSearch(initialQuery);
+      }
+      if (initialFilters) {
+        setLocalFilters(initialFilters);
+        updateFilters(initialFilters);
+      }
     }
-  }, [location.state]);
+  }, [location.state, updateSearch, updateFilters]);
 
-  // Mock forms data
-  const mockForms: FormMetadata[] = [
-    {
-      id: '1',
-      title: 'Commercial General Liability Application',
-      description: 'Standard application form for commercial general liability insurance',
-      formNumber: 'CGL-001-CA',
-      category: 'Application',
-      stateApplicability: ['CA', 'NV', 'AZ'],
-      editionDate: '2024-01-15T00:00:00Z',
-      effectiveDate: '2024-02-01T00:00:00Z',
-      isActive: true,
-      tags: ['liability', 'commercial', 'application'],
-      version: '2024.1',
-      lineOfBusiness: 'General Liability',
-      lastModified: '2024-01-15T10:30:00Z',
-      modifiedBy: 'user123',
-      fileSize: 245760,
-    },
-    {
-      id: '2',
-      title: 'Workers Compensation Policy Form',
-      description: 'Standard policy form for workers compensation coverage',
-      formNumber: 'WC-POL-002-TX',
-      category: 'Policy',
-      stateApplicability: ['TX', 'OK', 'LA'],
-      editionDate: '2024-01-10T00:00:00Z',
-      effectiveDate: '2024-01-15T00:00:00Z',
-      isActive: true,
-      tags: ['workers comp', 'policy', 'texas'],
-      version: '2024.1',
-      lineOfBusiness: 'Workers Compensation',
-      lastModified: '2024-01-10T14:20:00Z',
-      modifiedBy: 'user456',
-      fileSize: 189440,
-    },
-    {
-      id: '3',
-      title: 'Auto Liability Endorsement - Excluded Driver',
-      description: 'Endorsement to exclude specific drivers from auto liability coverage',
-      formNumber: 'AUTO-END-003-NY',
-      category: 'Endorsement',
-      stateApplicability: ['NY', 'NJ', 'CT'],
-      editionDate: '2024-01-08T00:00:00Z',
-      effectiveDate: '2024-01-20T00:00:00Z',
-      expirationDate: '2025-01-20T00:00:00Z',
-      isActive: false,
-      tags: ['auto', 'endorsement', 'excluded driver'],
-      version: '2023.3',
-      lineOfBusiness: 'Auto',
-      lastModified: '2024-01-08T09:15:00Z',
-      modifiedBy: 'user789',
-      fileSize: 156672,
-    },
-  ];
+  // Handle local filter changes
+  const handleSearchChange = (value: string) => {
+    setLocalSearchQuery(value);
+    updateSearch(value);
+  };
 
-  const filteredForms = mockForms.filter(form => {
-    // Search query filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchesQuery = 
-        form.title.toLowerCase().includes(query) ||
-        form.formNumber.toLowerCase().includes(query) ||
-        form.description?.toLowerCase().includes(query) ||
-        form.tags.some(tag => tag.toLowerCase().includes(query));
-      
-      if (!matchesQuery) return false;
-    }
-
-    // Category filter
-    if (filters.category && form.category !== filters.category) {
-      return false;
-    }
-
-    // Line of business filter
-    if (filters.lineOfBusiness && form.lineOfBusiness !== filters.lineOfBusiness) {
-      return false;
-    }
-
-    // Active status filter
-    if (filters.isActive !== undefined && form.isActive !== filters.isActive) {
-      return false;
-    }
-
-    // State filter
-    if (filters.states && filters.states.length > 0) {
-      const hasMatchingState = filters.states.some(state => 
-        form.stateApplicability.includes(state)
-      );
-      if (!hasMatchingState) return false;
-    }
-
-    return true;
-  });
+  const handleFilterChange = (newFilters: FormSearchFilters) => {
+    setLocalFilters(newFilters);
+    updateFilters(newFilters);
+  };
 
   const categories: FormCategory[] = [
     'Application', 'Policy', 'Endorsement', 'Certificate', 
@@ -175,7 +111,7 @@ const Forms = () => {
           <Box>
             <Heading size="xl" mb={2}>Forms Library</Heading>
             <Text color="gray.600">
-              {filteredForms.length} of {mockForms.length} forms
+              {loading ? 'Loading...' : `${forms.length} forms`}
             </Text>
           </Box>
 
@@ -186,8 +122,8 @@ const Forms = () => {
               <HStack gap={3}>
                 <Input
                   placeholder="Search forms by title, number, description, or tags..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={localSearchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   size="lg"
                   flex="1"
                 />
@@ -212,11 +148,14 @@ const Forms = () => {
                         borderRadius: '6px',
                         backgroundColor: 'white'
                       }}
-                      value={filters.category || ''}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters(prev => ({
-                        ...prev,
-                        category: e.target.value as FormCategory || undefined
-                      }))}
+                      value={localFilters.category || ''}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                        const newFilters = {
+                          ...localFilters,
+                          category: e.target.value as FormCategory || undefined
+                        };
+                        handleFilterChange(newFilters);
+                      }}
                     >
                       <option value="">All Categories</option>
                       {categories.map(category => (
@@ -235,11 +174,14 @@ const Forms = () => {
                         borderRadius: '6px',
                         backgroundColor: 'white'
                       }}
-                      value={filters.lineOfBusiness || ''}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters(prev => ({
-                        ...prev,
-                        lineOfBusiness: e.target.value as LineOfBusiness || undefined
-                      }))}
+                      value={localFilters.lineOfBusiness || ''}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                        const newFilters = {
+                          ...localFilters,
+                          lineOfBusiness: e.target.value as LineOfBusiness || undefined
+                        };
+                        handleFilterChange(newFilters);
+                      }}
                     >
                       <option value="">All Lines</option>
                       {linesOfBusiness.map(lob => (
@@ -258,11 +200,14 @@ const Forms = () => {
                         borderRadius: '6px',
                         backgroundColor: 'white'
                       }}
-                      value={filters.isActive === undefined ? '' : filters.isActive.toString()}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters(prev => ({
-                        ...prev,
-                        isActive: e.target.value === '' ? undefined : e.target.value === 'true'
-                      }))}
+                      value={localFilters.isActive === undefined ? '' : localFilters.isActive.toString()}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                        const newFilters = {
+                          ...localFilters,
+                          isActive: e.target.value === '' ? undefined : e.target.value === 'true'
+                        };
+                        handleFilterChange(newFilters);
+                      }}
                     >
                       <option value="">All Status</option>
                       <option value="true">Active</option>
@@ -277,8 +222,10 @@ const Forms = () => {
                         size="sm" 
                         variant="outline"
                         onClick={() => {
-                          setSearchQuery('');
-                          setFilters({});
+                          setLocalSearchQuery('');
+                          setLocalFilters({});
+                          handleSearchChange('');
+                          handleFilterChange({});
                         }}
                       >
                         Clear All
@@ -290,9 +237,28 @@ const Forms = () => {
             </VStack>
           </Box>
 
+          {/* Loading State */}
+          {loading && (
+            <Box textAlign="center" py={12}>
+              <LoadingSpinner />
+              <Text mt={4} color="gray.600">Loading forms...</Text>
+            </Box>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <Box textAlign="center" py={12}>
+              <Text color="red.500" mb={4}>{error}</Text>
+              <Button onClick={refresh} variant="outline">
+                Try Again
+              </Button>
+            </Box>
+          )}
+
           {/* Forms Grid */}
-          <SimpleGrid columns={{ base: 1, lg: 2, xl: 3 }} gap={6}>
-            {filteredForms.map((form) => (
+          {!loading && !error && (
+            <SimpleGrid columns={{ base: 1, lg: 2, xl: 3 }} gap={6}>
+              {forms.map((form) => (
               <Box
                 key={form.id}
                 bg="white"
@@ -387,24 +353,38 @@ const Forms = () => {
                   )}
                 </VStack>
               </Box>
-            ))}
-          </SimpleGrid>
+              ))}
+            </SimpleGrid>
+          )}
 
           {/* Empty State */}
-          {filteredForms.length === 0 && (
+          {!loading && !error && forms.length === 0 && (
             <Box textAlign="center" py={12}>
               <Text fontSize="lg" color="gray.500" mb={4}>
-                No forms found matching your criteria
+                {searchQuery || Object.keys(localFilters).length > 0
+                  ? 'No forms found matching your criteria'
+                  : 'No forms available'}
               </Text>
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setSearchQuery('');
-                  setFilters({});
-                }}
-              >
-                Clear Filters
-              </Button>
+              {searchQuery || Object.keys(localFilters).length > 0 ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setLocalSearchQuery('');
+                    setLocalFilters({});
+                    handleSearchChange('');
+                    handleFilterChange({});
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              ) : (
+                <Button
+                  colorPalette="blue"
+                  onClick={() => navigate(ROUTES.FORM_UPLOAD)}
+                >
+                  Upload Your First Form
+                </Button>
+              )}
             </Box>
           )}
         </VStack>
